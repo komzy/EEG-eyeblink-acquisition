@@ -1,0 +1,181 @@
+#include <stdint.h>
+#include <iostream>
+#include <fstream>
+#include <winsock2.h>
+#pragma comment(lib,"ws2_32.lib")
+using namespace std;
+
+char input[1];
+char buffer[4];
+char command[10];
+float *received;
+
+
+int main()
+{
+	cout<<endl<<"\t\t----- Welcome To The TI ADS129x Server -----"<<endl<<endl;
+
+	WSADATA WsaDat;
+	if(WSAStartup(MAKEWORD(2,2),&WsaDat)!=0)
+	{
+		cout<<"WSA Initialization failed!\r\n";
+		WSACleanup();
+		system("PAUSE");
+		return 0;
+	}
+					
+	SOCKET Socket=socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);
+	if(Socket==INVALID_SOCKET)
+	{
+		cout<<"Socket creation failed.\r\n";
+		WSACleanup();
+		system("PAUSE");
+		return 0;
+	}
+					
+	SOCKADDR_IN serverInf;
+	serverInf.sin_family=AF_INET;
+	serverInf.sin_addr.s_addr=INADDR_ANY;
+	serverInf.sin_port=htons(8080);
+	
+					
+	if(bind(Socket,(SOCKADDR*)(&serverInf),sizeof(serverInf))==SOCKET_ERROR)
+	{
+		cout<<"Unable to bind socket!\r\n";
+		WSACleanup();
+		system("PAUSE");
+		return 0;
+	}
+		
+	listen(Socket,1);
+					
+	SOCKET TempSock=SOCKET_ERROR;
+	while(TempSock==SOCKET_ERROR)
+	{
+		cout<<"Waiting for incoming connections...\r\n";
+		TempSock=accept(Socket,NULL,NULL);
+	}
+				
+	// If iMode!=0, non-blocking mode is enabled.
+
+	u_long iMode=1;
+	ioctlsocket(Socket,FIONBIO,&iMode);
+					
+	Socket=TempSock;
+	cout<<"Device connected!\r\n\r\n";
+		
+	cout<<"Press A to Acquire Data"<<endl<<"Press B to Request Test Signal"<<endl<<"Press C to Close Device & Shut Down"<<endl;
+	
+while(1)
+{
+	
+	int nError=WSAGetLastError();
+		if(nError!=WSAEWOULDBLOCK&&nError!=0)
+		{
+			cout<<"Winsock error code: "<<nError<<"\r\n";
+			cout<<"Device disconnected!\r\n";
+
+			// Shutdown our socket
+			shutdown(Socket,SD_SEND);
+
+			// Close our socket entirely
+			closesocket(Socket);
+
+			break;
+		}
+	
+	cout<<endl<<"Command?"<<endl;
+	cin>>input[1];
+		
+	switch ( input[1] )
+      {
+         
+		case 'A':
+		case 'a':
+            {
+				memset(command,'a',10);
+				ofstream myfile;
+				myfile.open ("Server Receive.txt",ios::out | ios::trunc | ios::binary);
+				if (!myfile.is_open()) 
+					{ 
+					cout<<"Unable to open text file!\r\n";
+					WSACleanup();
+					system("PAUSE");
+					return 0;
+					}
+
+				send(Socket,command,10,0);
+				cout<<"Acquiring Signal..."<<endl;
+				for (int o=0;o<10250;o++)
+					{
+					int inDataLength=recv(Socket,buffer,4,0);
+					received=(float*)buffer;
+					myfile<<*received<<"\r\n";
+					}
+				myfile.close();
+				cout<<"Acquisition Complete!"<<endl;
+				break;
+			}
+
+        case 'B': 
+		case 'b':
+			{
+				memset(command,'b',10);
+				ofstream myfile;
+				myfile.open ("Server Receive.txt",ios::out | ios::trunc | ios::binary);
+				if (!myfile.is_open()) 
+					{ 
+					cout<<"Unable to open text file!\r\n";
+					WSACleanup();
+					system("PAUSE");
+					return 0;
+					}
+
+				send(Socket,command,10,0);
+
+				cout<<"Acquiring Test Signal..."<<endl;
+
+				for (int o=0;o<10250;o++)
+					{
+					int inDataLength=recv(Socket,buffer,4,0);
+					received=(float*)buffer;
+					myfile<<*received<<"\r\n";
+					}
+				myfile.close();
+
+				cout<<"Test Signal Acquisition Complete!"<<endl;
+				break;				
+				
+			}
+		
+		case 'C':
+		case 'c':
+            {
+								
+				memset(command,'c',10);
+				send(Socket,command,10,0);
+				cout<<endl<<"Safe to Disconnect Device"<<endl;
+				
+				// Shutdown our socket
+				shutdown(Socket,SD_BOTH);
+
+				// Close our socket entirely
+				closesocket(Socket);
+			
+				Sleep(1000);
+				WSACleanup();
+				
+				cout<<"System is Shutting Down..."<<endl;
+				Sleep(2000);
+				exit(0);
+				break;
+									
+			}
+         default:
+			 {cout<<"Error: Unrecognized Input."<<endl;}
+	}
+}
+system("PAUSE");
+return 0;
+
+}
